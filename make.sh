@@ -1,0 +1,1 @@
+g++ -lrt -o main.o *.cpp
