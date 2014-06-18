@@ -99,13 +99,13 @@ public:
 			return;
 		}
 		
-		timespec ts, ts2;
+		timespec lastTS, currTS, lastLogTS;
 		
 		// Calc clock_gettime delay
-		clock_gettime(CLOCK_REALTIME, &ts);
+		clock_gettime(CLOCK_REALTIME, &lastTS);
 		for (int i=0; i<1000; i++)
-			clock_gettime(CLOCK_REALTIME, &ts2);
-		int gettime_delay_ns = ((ts2.tv_sec-ts.tv_sec)*1000000000 + ts2.tv_nsec-ts.tv_nsec) / 1000;
+			clock_gettime(CLOCK_REALTIME, &currTS);
+		int gettimeDelayNs = ((currTS.tv_sec-lastTS.tv_sec)*1000000000 + currTS.tv_nsec-lastTS.tv_nsec) / 1000;
 		
 		// Vars
 		double acc[3], fAcc[3] = {0, 0, 0}, mag;
@@ -121,7 +121,8 @@ public:
 		lAng[0] = atan2(gVec[1], sqrt(gVec[0]*gVec[0] + gVec[2]*gVec[2])) * 180.0/M_PI;
 		lAng[1] = atan2(gVec[0], gVec[2]) * 180.0/M_PI;
 		lAng[2] = 0;
-		clock_gettime(CLOCK_REALTIME, &ts);
+		clock_gettime(CLOCK_REALTIME, &lastTS);
+		lastLogTS = lastTS;
 				
 		// Main loop
 		while (!terminated) {
@@ -137,9 +138,9 @@ public:
 			fRot[1] = (rot[1] + 15 * fRot[1]) / 16;
 			fRot[2] = (rot[2] + 15 * fRot[2]) / 16;		
 
-			clock_gettime(CLOCK_REALTIME, &ts2);
-			interval = ((ts2.tv_sec-ts.tv_sec)*1000000000 + ts2.tv_nsec-ts.tv_nsec - gettime_delay_ns)/1000000000.0;
-			ts = ts2;
+			clock_gettime(CLOCK_REALTIME, &currTS);
+			interval = ((currTS.tv_sec-lastTS.tv_sec)*1000000000 + currTS.tv_nsec-lastTS.tv_nsec - gettimeDelayNs)/1000000000.0;
+			lastTS = currTS;
 			
 			dAng[0] = -fRot[0] * interval * M_PI/180.0;
 			dAng[1] = -fRot[1] * interval * M_PI/180.0;
@@ -231,6 +232,12 @@ public:
 			// Send Log
 			if (logLevel && counter % logSendPeriod == 0) {
 				log.logLevel = logLevel;
+				if (1 == logSendPeriod)
+					log.fullInterval = interval;
+				else
+					log.fullInterval = ((uint64)(currTS.tv_sec-lastLogTS.tv_sec)*1000000000 + currTS.tv_nsec-lastLogTS.tv_nsec - gettimeDelayNs)/1000000000.0;
+				lastLogTS = currTS;
+				log.armed = armed;
 				log.rcThrottle = throttle;
 				log.rcPitch = pitch;
 				log.rcRoll = roll;
@@ -242,7 +249,7 @@ public:
 				if (1 == logLevel) {
 					conn->send(&log, sizeof(LogMsg1), debugAddress);
 				}else{
-					log.interval = interval;
+					log.lastInterval = interval;
 					log.motorFL = mFL;
 					log.motorFR = mFR;
 					log.motorBL = mBL;
